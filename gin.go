@@ -302,6 +302,7 @@ func iterate(path, method string, routes RoutesInfo, root *node) RoutesInfo {
 // Run attaches the router to a http.Server and starts listening and serving HTTP requests.
 // It is a shortcut for http.ListenAndServe(addr, router)
 // Note: this method will block the calling goroutine indefinitely unless an error happens.
+// gin的Run其实就是对http.ListenAndServe 的封装
 func (engine *Engine) Run(addr ...string) (err error) {
 	defer func() { debugPrintError(err) }()
 
@@ -368,13 +369,19 @@ func (engine *Engine) RunListener(listener net.Listener) (err error) {
 
 // ServeHTTP conforms to the http.Handler interface.
 func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	// 从sync.pool中获得context对象
 	c := engine.pool.Get().(*Context)
+	// 重设http.ResponseWriter
 	c.writermem.reset(w)
+	// 重设*http.Request
 	c.Request = req
+	// context对象重置
 	c.reset()
 
+	// // 进行本次请求的处理
 	engine.handleHTTPRequest(c)
 
+	//  // 将context对象放进sync.Pool复用
 	engine.pool.Put(c)
 }
 
