@@ -26,13 +26,29 @@ var (
 	slash     = []byte("/")
 )
 
+// RecoveryFunc defines the function passable to CustomRecovery.
+type RecoveryFunc func(c *Context, err interface{})
+
 // Recovery returns a middleware that recovers from any panics and writes a 500 if there was one.
 func Recovery() HandlerFunc {
 	return RecoveryWithWriter(DefaultErrorWriter)
 }
 
+//CustomRecovery returns a middleware that recovers from any panics and calls the provided handle func to handle it.
+func CustomRecovery(handle RecoveryFunc) HandlerFunc {
+	return RecoveryWithWriter(DefaultErrorWriter, handle)
+}
+
 // RecoveryWithWriter returns a middleware for a given writer that recovers from any panics and writes a 500 if there was one.
-func RecoveryWithWriter(out io.Writer) HandlerFunc {
+func RecoveryWithWriter(out io.Writer, recovery ...RecoveryFunc) HandlerFunc {
+	if len(recovery) > 0 {
+		return CustomRecoveryWithWriter(out, recovery[0])
+	}
+	return CustomRecoveryWithWriter(out, defaultHandleRecovery)
+}
+
+// CustomRecoveryWithWriter returns a middleware for a given writer that recovers from any panics and calls the provided handle func to handle it.
+func CustomRecoveryWithWriter(out io.Writer, handle RecoveryFunc) HandlerFunc {
 	var logger *log.Logger
 	if out != nil {
 		logger = log.New(out, "\n\n\x1b[31m", log.LstdFlags)
@@ -52,29 +68,40 @@ func RecoveryWithWriter(out io.Writer) HandlerFunc {
 				}
 				if logger != nil {
 					stack := stack(3)
-					httprequest, _ := httputil.DumpRequest(c.Request, false)
+					httpRequest, _ := httputil.DumpRequest(c.Request, false)
+					headers := strings.Split(string(httpRequest), "\r\n")
+					for idx, header := range headers {
+						current := strings.Split(header, ":")
+						if current[0] == "Authorization" {
+							headers[idx] = current[0] + ": *"
+						}
+					}
+					headersToStr := strings.Join(headers, "\r\n")
 					if brokenPipe {
-						logger.Printf("%s\n%s%s", err, string(httprequest), reset)
+						logger.Printf("%s\n%s%s", err, headersToStr, reset)
 					} else if IsDebugging() {
 						logger.Printf("[Recovery] %s panic recovered:\n%s\n%s\n%s%s",
-							timeFormat(time.Now()), string(httprequest), err, stack, reset)
+							timeFormat(time.Now()), headersToStr, err, stack, reset)
 					} else {
 						logger.Printf("[Recovery] %s panic recovered:\n%s\n%s%s",
 							timeFormat(time.Now()), err, stack, reset)
 					}
 				}
-
-				// If the connection is dead, we can't write a status to it.
 				if brokenPipe {
-					c.Error(err.(error))
+					// If the connection is dead, we can't write a status to it.
+					c.Error(err.(error)) // nolint: errcheck
 					c.Abort()
 				} else {
-					c.AbortWithStatus(http.StatusInternalServerError)
+					handle(c, err)
 				}
 			}
 		}()
 		c.Next()
 	}
+}
+
+func defaultHandleRecovery(c *Context, err interface{}) {
+	c.AbortWithStatus(http.StatusInternalServerError)
 }
 
 // stack returns a nicely formatted stack frame, skipping skip frames.
@@ -128,8 +155,8 @@ func function(pc uintptr) []byte {
 	//	*T.ptrmethod
 	// Also the package path might contains dot (e.g. code.google.com/...),
 	// so first eliminate the path prefix
-	if lastslash := bytes.LastIndex(name, slash); lastslash >= 0 {
-		name = name[lastslash+1:]
+	if lastSlash := bytes.LastIndex(name, slash); lastSlash >= 0 {
+		name = name[lastSlash+1:]
 	}
 	if period := bytes.Index(name, dot); period >= 0 {
 		name = name[period+1:]
@@ -139,6 +166,6 @@ func function(pc uintptr) []byte {
 }
 
 func timeFormat(t time.Time) string {
-	var timeString = t.Format("2006/01/02 - 15:04:05")
+	timeString := t.Format("2006/01/02 - 15:04:05")
 	return timeString
 }

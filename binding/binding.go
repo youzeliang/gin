@@ -2,6 +2,8 @@
 // Use of this source code is governed by a MIT style
 // license that can be found in the LICENSE file.
 
+// +build !nomsgpack
+
 package binding
 
 import "net/http"
@@ -49,7 +51,8 @@ type BindingUri interface {
 // https://github.com/go-playground/validator/tree/v8.18.2.
 type StructValidator interface {
 	// ValidateStruct can receive any kind of type and it should never panic, even if the configuration is not right.
-	// If the received type is not a struct, any validation should be skipped and nil must be returned.
+	// If the received type is a slice|array, the validation should be performed travel on every element.
+	// If the received type is not a struct or slice|array, any validation should be skipped and nil must be returned.
 	// If the received type is a struct or pointer to a struct, the validation should be performed.
 	// If the struct is not valid or the validation itself fails, a descriptive error should be returned.
 	// Otherwise nil must be returned.
@@ -78,12 +81,13 @@ var (
 	MsgPack       = msgpackBinding{}
 	YAML          = yamlBinding{}
 	Uri           = uriBinding{}
+	Header        = headerBinding{}
 )
 
 // Default returns the appropriate Binding instance based on the HTTP method
 // and the content type.
 func Default(method, contentType string) Binding {
-	if method == "GET" {
+	if method == http.MethodGet {
 		return Form
 	}
 
@@ -98,7 +102,9 @@ func Default(method, contentType string) Binding {
 		return MsgPack
 	case MIMEYAML:
 		return YAML
-	default: //case MIMEPOSTForm, MIMEMultipartPOSTForm:
+	case MIMEMultipartPOSTForm:
+		return FormMultipart
+	default: // case MIMEPOSTForm:
 		return Form
 	}
 }

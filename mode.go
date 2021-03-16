@@ -11,8 +11,8 @@ import (
 	"github.com/gin-gonic/gin/binding"
 )
 
-// ENV_GIN_MODE indicates environment name for gin mode.
-const ENV_GIN_MODE = "GIN_MODE"
+// EnvGinMode indicates environment name for gin mode.
+const EnvGinMode = "GIN_MODE"
 
 const (
 	// DebugMode indicates gin mode is debug.
@@ -22,6 +22,7 @@ const (
 	// TestMode indicates gin mode is test.
 	TestMode = "test"
 )
+
 const (
 	debugCode = iota
 	releaseCode
@@ -44,25 +45,27 @@ var ginMode = debugCode
 var modeName = DebugMode
 
 func init() {
-	mode := os.Getenv(ENV_GIN_MODE)
+	mode := os.Getenv(EnvGinMode)
 	SetMode(mode)
 }
 
 // SetMode sets gin mode according to input string.
 func SetMode(value string) {
+	if value == "" {
+		value = DebugMode
+	}
+
 	switch value {
-	case DebugMode, "":
+	case DebugMode:
 		ginMode = debugCode
 	case ReleaseMode:
 		ginMode = releaseCode
 	case TestMode:
 		ginMode = testCode
 	default:
-		panic("gin mode unknown: " + value)
+		panic("gin mode unknown: " + value + " (available mode: debug release test)")
 	}
-	if value == "" {
-		value = DebugMode
-	}
+
 	modeName = value
 }
 
@@ -71,10 +74,16 @@ func DisableBindValidation() {
 	binding.Validator = nil
 }
 
-// EnableJsonDecoderUseNumber sets true for binding.EnableDecoderUseNumberto to
+// EnableJsonDecoderUseNumber sets true for binding.EnableDecoderUseNumber to
 // call the UseNumber method on the JSON Decoder instance.
 func EnableJsonDecoderUseNumber() {
 	binding.EnableDecoderUseNumber = true
+}
+
+// EnableJsonDecoderDisallowUnknownFields sets true for binding.EnableDecoderDisallowUnknownFields to
+// call the DisallowUnknownFields method on the JSON Decoder instance.
+func EnableJsonDecoderDisallowUnknownFields() {
+	binding.EnableDecoderDisallowUnknownFields = true
 }
 
 // Mode returns currently gin mode.
