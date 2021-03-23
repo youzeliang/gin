@@ -410,13 +410,14 @@ func (engine *Engine) handleHTTPRequest(c *Context) {
 	}
 
 	// Find root of the tree for the given HTTP method
+	// 根据请求方法找到对应的路由树
 	t := engine.trees
 	for i, tl := 0, len(t); i < tl; i++ {
 		if t[i].method != httpMethod {
 			continue
 		}
 		root := t[i].root
-		// Find route in tree
+		// Find route in tree   在路由树中根据path查找
 		value := root.getValue(rPath, c.params, unescape)
 		if value.params != nil {
 			c.Params = *value.params
@@ -424,6 +425,7 @@ func (engine *Engine) handleHTTPRequest(c *Context) {
 		if value.handlers != nil {
 			c.handlers = value.handlers
 			c.fullPath = value.fullPath
+			// 执行函数链条
 			c.Next()
 			c.writermem.WriteHeaderNow()
 			return
